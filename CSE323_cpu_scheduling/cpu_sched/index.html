@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPU Scheduling Simulator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="scanline"></div>
+
+<div class="container">
+
+    <header>
+        <div class="header-badge">OS LAB</div>
+        <h1>CPU Scheduling<br><span class="accent">Simulator</span></h1>
+        <p class="subtitle">Visualize &amp; compare scheduling algorithms in real-time</p>
+    </header>
+
+    <!-- ══════════════════════════════════════════════════
+         MODE TABS
+    ══════════════════════════════════════════════════ -->
+    <div class="mode-tabs">
+        <button class="mode-tab active" id="tab-single" onclick="switchMode('single')">
+            <span class="tab-icon">◈</span> Algorithm
+        </button>
+        <button class="mode-tab" id="tab-compare" onclick="switchMode('compare')">
+            <span class="tab-icon">⇄</span> Comparison
+        </button>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════
+         SINGLE MODE
+    ══════════════════════════════════════════════════ -->
+    <div id="mode-single">
+        <section class="config-panel">
+            <div class="panel-label">// CONFIGURATION</div>
+            <div class="config-row">
+                <div class="field-group">
+                    <label for="algo">Algorithm</label>
+                    <select id="algo" onchange="onAlgoChange()">
+                        <option value="FCFS">FCFS — First Come First Served</option>
+                        <option value="RR">RR — Round Robin</option>
+                        <option value="SJF">SJF — Shortest Job First</option>
+                        <option value="SRTF">SRTF — Shortest Remaining Time</option>
+                        <option value="PRIORITY">PRIORITY — Non-Preemptive Priority</option>
+                        <option value="PSJF">PSJF — Predicted Shortest Job First</option>
+                    </select>
+                </div>
+                <div class="field-group" id="quantumGroup" style="display:none">
+                    <label for="quantum">Time Quantum</label>
+                    <input type="number" id="quantum" value="2" min="1" placeholder="e.g. 2">
+                </div>
+                <div class="field-group">
+                    <label for="n">Processes</label>
+                    <input type="number" id="n" value="3" min="1" max="16" placeholder="e.g. 4">
+                </div>
+            </div>
+            <div id="psjfParams" class="psjf-row" style="display:none">
+                <div class="field-group">
+                    <label for="alpha">Alpha (α) <span class="hint">exponential weight [0–1]</span></label>
+                    <input type="number" id="alpha" value="0.5" min="0" max="1" step="0.1" placeholder="0.5">
+                </div>
+                <div class="field-group">
+                    <label for="tau0">Initial τ₀ <span class="hint">starting burst estimate</span></label>
+                    <input type="number" id="tau0" value="5" min="0" step="0.5" placeholder="5">
+                </div>
+            </div>
+            <button class="btn-primary" onclick="generateInputs()">
+                <span class="btn-icon">⬡</span> Generate Process Table
+            </button>
+        </section>
+
+        <section id="processSection" style="display:none">
+            <div class="panel-label">// PROCESS INPUT</div>
+            <div id="processInputs" class="process-grid"></div>
+            <button class="btn-run" onclick="runSimulation()">
+                <span>▶ Run Simulation</span>
+            </button>
+        </section>
+
+        <section id="resultsSection" style="display:none">
+            <div class="panel-label">// GANTT CHART</div>
+            <div id="gantt" class="gantt-wrapper"></div>
+            <div class="panel-label" style="margin-top:32px">// METRICS TABLE</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>PID</th><th>Arrival</th><th>Burst</th><th>Priority</th>
+                        <th>Finish</th><th>Waiting</th><th>Turnaround</th>
+                    </tr>
+                </thead>
+                <tbody id="output"></tbody>
+            </table>
+            <div id="averages" class="averages-box"></div>
+            <div id="predLog" class="pred-log" style="display:none">
+                <div class="panel-label">// PREDICTION LOG (PSJF)</div>
+                <div id="predLogContent"></div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════
+         COMPARISON MODE
+    ══════════════════════════════════════════════════ -->
+    <div id="mode-compare" style="display:none">
+
+        <!-- Shared process config -->
+        <section class="config-panel">
+            <div class="panel-label">// SHARED PROCESS TABLE</div>
+            <div class="config-row">
+                <div class="field-group">
+                    <label for="cmp-n">Processes</label>
+                    <input type="number" id="cmp-n" value="3" min="1" max="16" placeholder="e.g. 4">
+                </div>
+                <div class="field-group">
+                    <label>&nbsp;</label>
+                    <button class="btn-primary" style="width:100%" onclick="generateCompareInputs()">
+                        <span class="btn-icon">⬡</span> Generate Process Table
+                    </button>
+                </div>
+            </div>
+            <div id="cmpProcessSection" style="display:none">
+                <div id="cmpProcessInputs" class="process-grid"></div>
+            </div>
+        </section>
+
+        <!-- Two algorithm selectors -->
+        <div id="cmpAlgoSection" style="display:none">
+            <div class="compare-algo-row">
+                <!-- Left algo -->
+                <div class="algo-card algo-card--a">
+                    <div class="algo-card-header">
+                        <div class="algo-dot algo-dot--a"></div>
+                        <span>Algorithm A</span>
+                    </div>
+                    <div class="field-group" style="margin-bottom:10px">
+                        <label for="cmp-algo-a">Algorithm</label>
+                        <select id="cmp-algo-a" onchange="onCmpAlgoChange('a')">
+                            <option value="FCFS">FCFS — First Come First Served</option>
+                            <option value="RR">RR — Round Robin</option>
+                            <option value="SJF">SJF — Shortest Job First</option>
+                            <option value="SRTF">SRTF — Shortest Remaining Time</option>
+                            <option value="PRIORITY">PRIORITY — Non-Preemptive Priority</option>
+                            <option value="PSJF">PSJF — Predicted Shortest Job First</option>
+                        </select>
+                    </div>
+                    <div id="cmp-quantum-a" style="display:none" class="field-group" style="margin-bottom:10px">
+                        <label for="cmp-q-a">Quantum</label>
+                        <input type="number" id="cmp-q-a" value="2" min="1">
+                    </div>
+                    <div id="cmp-psjf-a" style="display:none" class="psjf-row" style="margin-top:8px">
+                        <div class="field-group">
+                            <label for="cmp-alpha-a">Alpha (α)</label>
+                            <input type="number" id="cmp-alpha-a" value="0.5" min="0" max="1" step="0.1">
+                        </div>
+                        <div class="field-group">
+                            <label for="cmp-tau0-a">Initial τ₀</label>
+                            <input type="number" id="cmp-tau0-a" value="5" min="0" step="0.5">
+                        </div>
+                    </div>
+                    <div id="cmp-priority-note-a" style="display:none" class="priority-note">
+                        Priority column visible in table below
+                    </div>
+                </div>
+
+                <div class="compare-vs">VS</div>
+
+                <!-- Right algo -->
+                <div class="algo-card algo-card--b">
+                    <div class="algo-card-header">
+                        <div class="algo-dot algo-dot--b"></div>
+                        <span>Algorithm B</span>
+                    </div>
+                    <div class="field-group" style="margin-bottom:10px">
+                        <label for="cmp-algo-b">Algorithm</label>
+                        <select id="cmp-algo-b" onchange="onCmpAlgoChange('b')">
+                            <option value="FCFS">FCFS — First Come First Served</option>
+                            <option value="RR" selected>RR — Round Robin</option>
+                            <option value="SJF">SJF — Shortest Job First</option>
+                            <option value="SRTF">SRTF — Shortest Remaining Time</option>
+                            <option value="PRIORITY">PRIORITY — Non-Preemptive Priority</option>
+                            <option value="PSJF">PSJF — Predicted Shortest Job First</option>
+                        </select>
+                    </div>
+                    <div id="cmp-quantum-b" class="field-group" style="margin-bottom:10px">
+                        <label for="cmp-q-b">Quantum</label>
+                        <input type="number" id="cmp-q-b" value="2" min="1">
+                    </div>
+                    <div id="cmp-psjf-b" style="display:none" class="psjf-row" style="margin-top:8px">
+                        <div class="field-group">
+                            <label for="cmp-alpha-b">Alpha (α)</label>
+                            <input type="number" id="cmp-alpha-b" value="0.5" min="0" max="1" step="0.1">
+                        </div>
+                        <div class="field-group">
+                            <label for="cmp-tau0-b">Initial τ₀</label>
+                            <input type="number" id="cmp-tau0-b" value="5" min="0" step="0.5">
+                        </div>
+                    </div>
+                    <div id="cmp-priority-note-b" style="display:none" class="priority-note">
+                        Priority column visible in table below
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-run" onclick="runComparison()">
+                <span>⇄ Compare Algorithms</span>
+            </button>
+        </div>
+
+        <!-- Comparison Results -->
+        <div id="cmpResultsSection" style="display:none">
+
+            <!-- Side-by-side Gantt Charts -->
+            <div class="cmp-gantt-row">
+                <div class="cmp-gantt-block">
+                    <div class="cmp-gantt-label cmp-label--a">
+                        <span class="algo-dot algo-dot--a"></span>
+                        <span id="cmp-gantt-title-a">Algorithm A</span>
+                        <span class="gantt-subtitle">Gantt Chart</span>
+                    </div>
+                    <div id="cmp-gantt-a" class="gantt-wrapper"></div>
+                </div>
+                <div class="cmp-gantt-block">
+                    <div class="cmp-gantt-label cmp-label--b">
+                        <span class="algo-dot algo-dot--b"></span>
+                        <span id="cmp-gantt-title-b">Algorithm B</span>
+                        <span class="gantt-subtitle">Gantt Chart</span>
+                    </div>
+                    <div id="cmp-gantt-b" class="gantt-wrapper"></div>
+                </div>
+            </div>
+
+            <!-- Metric bars comparison -->
+            <div class="panel-label" style="margin-top:36px">// PERFORMANCE COMPARISON</div>
+            <div class="metric-compare-grid" id="metricBars"></div>
+
+            <!-- Winner verdict -->
+            <div id="verdictBox" class="verdict-box"></div>
+
+            <!-- Side-by-side tables -->
+            <div class="cmp-tables-row">
+                <div class="cmp-table-block">
+                    <div class="cmp-table-label cmp-label--a">
+                        <span class="algo-dot algo-dot--a"></span>
+                        <span id="cmp-tbl-title-a">Algorithm A</span>
+                    </div>
+                    <table>
+                        <thead><tr><th>PID</th><th>Finish</th><th>Waiting</th><th>Turnaround</th></tr></thead>
+                        <tbody id="cmp-output-a"></tbody>
+                    </table>
+                    <div id="cmp-avg-a" class="averages-box" style="margin-top:10px"></div>
+                </div>
+                <div class="cmp-table-block">
+                    <div class="cmp-table-label cmp-label--b">
+                        <span class="algo-dot algo-dot--b"></span>
+                        <span id="cmp-tbl-title-b">Algorithm B</span>
+                    </div>
+                    <table>
+                        <thead><tr><th>PID</th><th>Finish</th><th>Waiting</th><th>Turnaround</th></tr></thead>
+                        <tbody id="cmp-output-b"></tbody>
+                    </table>
+                    <div id="cmp-avg-b" class="averages-box" style="margin-top:10px"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
